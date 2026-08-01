@@ -1,0 +1,237 @@
+# MW Temperature / Humidity Card
+
+[![CI](https://github.com/visaodeempresa/mw-ha-temp-humidity-card/actions/workflows/ci.yml/badge.svg)](https://github.com/visaodeempresa/mw-ha-temp-humidity-card/actions/workflows/ci.yml)
+[![Release](https://img.shields.io/github/v/release/visaodeempresa/mw-ha-temp-humidity-card?sort=semver)](https://github.com/visaodeempresa/mw-ha-temp-humidity-card/releases)
+[![HACS](https://img.shields.io/badge/HACS-Dashboard-41BDF5.svg)](https://hacs.xyz)
+
+Card do Lovelace para **temperatura e umidade**: dois sensores, **uma** bateria.
+
+```
+┌───────────────────────────────────────┐
+│              SALA DE TV               │
+│  🌡 23,4 °C     🔋45%      58 % 💧     │
+│         zigbee · -62 dBm · ⌂ ZBT-2    │
+└───────────────────────────────────────┘
+   └── cor pela temperatura ──┴── cor pela umidade ──┘
+```
+
+A **metade esquerda** pinta pela faixa de temperatura, a **direita** pela faixa
+de umidade — cinco faixas cada, com degradê entre elas. Arquivo único, sem
+build: `dist/mw-temp-humidity-card.js` é fonte e artefato. JS puro +
+`<ha-form>`, sem dependências.
+
+## Parentesco (e independência)
+
+Mesma família do
+[door-window](https://github.com/visaodeempresa/mw-ha-door-window-card) e do
+[occupancy-motion](https://github.com/visaodeempresa/mw-ha-occupancy-motion-card),
+e como eles: **código próprio, nada compartilhado**. Aqui a diferença é
+estrutural — dois sensores no mesmo card, uma bateria só, e cor **contínua por
+faixa** em vez de duas cores de estado.
+
+## Instalação
+
+### HACS (recomendado)
+
+1. HACS → **⋮** → **Repositórios personalizados**
+2. URL: `https://github.com/visaodeempresa/mw-ha-temp-humidity-card` ·
+   Categoria: **Dashboard**
+3. Instalar **MW Temperature / Humidity Card** e recarregar a página (⌘⇧R).
+
+### Manual
+
+`dist/mw-temp-humidity-card.js` em `/config/www/` e o recurso
+`/local/mw-temp-humidity-card.js` (Módulo JavaScript) em
+**Configurações → Painéis → ⋮ → Recursos**.
+
+## Uso mínimo
+
+```yaml
+type: custom:mw-temp-humidity-card
+temp_entity: sensor.t_h_lux_da_sala_temperatura
+hum_entity: sensor.t_h_lux_da_sala_umidade
+```
+
+A bateria é descoberta pelo dispositivo dos sensores; o nome sai do
+`friendly_name` **sem a grandeza** (`Sala Temperatura` → `Sala`); as unidades
+vêm das próprias entidades.
+
+Um sensor só também funciona: informe apenas `temp_entity` **ou** `hum_entity`
+— o outro lado mostra `—` com o fundo neutro.
+
+## Editor visual
+
+| Campo | O que faz |
+|---|---|
+| **Dispositivo** | Lista só os dispositivos que têm temperatura e/ou umidade. |
+| **Sensor de temperatura / de umidade** | Filtrados pelo dispositivo. Sem dispositivo, todos os da grandeza; em último caso, todos os sensores. |
+| **Sensor de bateria** | Só aparece com a bateria ligada. Lista os sensores do dispositivo; **— nenhum —** limpa **e** desliga a descoberta automática. |
+| **Rodapé técnico** | Quatro flags independentes — protocolo, RSSI, LQI e roteador. Cada um revela o seu campo só quando ligado. |
+
+> Você pediu "mais dois flags"; entreguei **quatro independentes** — dá para
+> mostrar só o roteador, ou só o RSSI, sem carregar o resto junto.
+
+Trocar de dispositivo limpa o que era do antigo e já seleciona a temperatura e
+a umidade do novo. O editor **não grava defaults no YAML**.
+
+## Propriedades
+
+### Entidades
+
+| Propriedade | Tipo | Padrão | Descrição |
+|---|---|---|---|
+| `temp_entity` | string | `""` | Sensor de temperatura (ao menos um dos dois é obrigatório). |
+| `hum_entity` | string | `""` | Sensor de umidade. |
+| `device` | string | `""` | ID do dispositivo; só o editor usa, para filtrar. |
+| `battery_entity` | string | `""` | Vazio = descoberta automática. |
+| `battery_auto` | bool | `true` | Procurar a bateria no mesmo dispositivo (ou por nome parecido). |
+| `rssi_entity` / `lqi_entity` | string | `""` | Sensores do rodapé técnico. |
+
+### Conteúdo e rodapé
+
+| Propriedade | Tipo | Padrão | Descrição |
+|---|---|---|---|
+| `name` | string | `""` | Vazio = nome do sensor sem a grandeza. |
+| `show_name` / `show_icons` / `show_battery` | bool | `true` | O que desenhar. |
+| `show_protocol` / `show_rssi` / `show_lqi` / `show_router` | bool | `false` | Ligam o rodapé técnico (item a item). |
+| `protocol` | `none` \| `zigbee` \| `zwave` \| `wifi` \| `bluetooth` \| `thread` \| `matter` | `none` | Ícone do protocolo. |
+| `router` | `none` \| `HA` \| `ZBT-2` \| `ZWA-2` \| `X5` \| `other` | `none` | Roteador/coordenador. |
+| `router_label` | string | `""` | Sigla livre quando `router: other`. |
+| `icon_temp` / `icon_hum` | ícone | `mdi:thermometer` / `mdi:water-percent` | Ícones das pontas. |
+| `icon_unavailable` | ícone | `mdi:help-rhombus-outline` | Ponta sem leitura. |
+| `temp_decimals` / `hum_decimals` | número | `1` / `0` | Casas decimais. |
+
+### Faixas de cor
+
+| Propriedade | Padrão | Descrição |
+|---|---|---|
+| `temp_stop_1..4` | `16`, `20`, `24`, `28` | Limites das 5 faixas de temperatura (°C). |
+| `hum_stop_1..4` | `30`, `40`, `60`, `70` | Limites das 5 faixas de umidade (%). |
+| `color_temp_1..5` | `#3d7ebf` `#4aa3c7` `#4caf50` `#f2a33c` `#e4572e` | Frio → conforto → quente. |
+| `color_hum_1..5` | `#d99a3f` `#d9c14f` `#4caf50` `#47a8c9` `#2f7fb5` | Seco → conforto → úmido. |
+| `blend` | `true` | Degradê entre as faixas. `false` = faixas secas. |
+| `seam_blend` | `10` | % de transição no meio do card. `0` = corte seco no meio. |
+| `color_unavailable` | `rgba(120,120,120,0.6)` | Metade sem leitura. |
+
+Com `blend: true` o valor caminha entre as cores âncora (o centro de cada
+faixa), então 23 °C fica num verde puxando para o âmbar em vez de saltar de
+cor no limite. Com `blend: false` cada faixa é uma cor seca — útil para
+leitura rápida "está na faixa X".
+
+### Texto, tamanhos e efeitos
+
+`text_auto_contrast` (`true`) escolhe entre `color_text_dark` (`#1a1a1a`) e
+`color_text_light` (`#ffffff`) pela luminância do fundo daquela metade — é o
+que mantém o número legível tanto no azul frio quanto no âmbar. Desligando,
+o texto usa sempre a cor clara.
+
+Tamanhos (px): `icon_size` 22 · `value_size` 18 · `name_size` 10 ·
+`battery_size` 12 · `battery_icon_size` 18 · `foot_size` 10 ·
+`border_radius` 10 · `padding` 6 · `gap` 4 · `height` `""` (automática).
+Efeitos: `gradient` / `shadow` / `lift` (`true`).
+Cores de texto: `color_name`, `color_foot`, `color_battery_text`.
+
+### Bateria
+
+`battery_show_percent` (`true`), `battery_rotate` (`false`), limites
+`battery_low` 20 / `battery_medium` 50 / `battery_high` 70 e as cores
+`color_battery_low` `#e53935` · `medium` `#fdd835` · `high` `#9ccc65` ·
+`full` `#43a047`. Sem leitura vira `--%` com `mdi:battery-unknown`.
+
+### Ações
+
+`tap_action` padrão **`auto`**: cada pedaço abre o *more-info* do seu próprio
+sensor — toque na temperatura, na umidade ou na bateria. Trocando para
+`more-info`, `navigate`, `url` ou `none`, o card inteiro passa a ter uma ação
+só. `hold_action` (500 ms) aceita os mesmos valores, com `navigation_path` e
+`url_path`.
+
+## Exemplos
+
+### 1. Sala, o básico
+
+```yaml
+type: custom:mw-temp-humidity-card
+temp_entity: sensor.t_h_lux_da_sala_temperatura
+hum_entity: sensor.t_h_lux_da_sala_umidade
+name: SALA
+```
+
+### 2. Com rodapé técnico completo
+
+```yaml
+type: custom:mw-temp-humidity-card
+temp_entity: sensor.qualidade_do_ar_da_cozinha_temperatura
+hum_entity: sensor.qualidade_do_ar_da_cozinha_umidade
+name: COZINHA
+show_protocol: true
+protocol: zigbee
+show_rssi: true
+rssi_entity: sensor.qualidade_do_ar_da_cozinha_rssi
+show_lqi: true
+lqi_entity: sensor.qualidade_do_ar_da_cozinha_lqi
+show_router: true
+router: ZBT-2
+```
+
+### 3. Faixas secas e sem bateria (sensor alimentado por tomada)
+
+```yaml
+type: custom:mw-temp-humidity-card
+temp_entity: sensor.organizar_qualidade_do_ar_do_escritorio_temperatura
+hum_entity: sensor.organizar_qualidade_do_ar_do_escritorio_umidade
+name: ESCRITÓRIO
+show_battery: false
+blend: false
+seam_blend: 0
+```
+
+### 4. Faixas próprias (adega: frio e úmido é o certo)
+
+```yaml
+type: custom:mw-temp-humidity-card
+temp_entity: sensor.adega_temperatura
+hum_entity: sensor.adega_umidade
+name: ADEGA
+temp_stop_1: 10
+temp_stop_2: 12
+temp_stop_3: 14
+temp_stop_4: 16
+hum_stop_1: 50
+hum_stop_2: 60
+hum_stop_3: 75
+hum_stop_4: 80
+```
+
+Mais exemplos em [`examples/`](examples/).
+
+## Solução de problemas
+
+| Sintoma | Causa provável | O que fazer |
+|---|---|---|
+| "Custom element doesn't exist" | recurso não carregado | ⌘⇧R (o `?hacstag=` é fixo por versão). |
+| Um lado mostra `—` | entidade não configurada ou sem número | Escolha o sensor no editor. |
+| Número ilegível numa das metades | contraste automático desligado | `text_auto_contrast: true`. |
+| Cores "saltando" | `blend: false` | Ligue o `blend`. |
+| Bateria em `--%` | sensor não encontrado | Escolha no editor, ou `show_battery: false`. |
+| HACS não mostra versão nova | commit ainda não chegou na `main` | O release só sai no merge para a `main`. |
+
+## Desenvolvimento (DevOps)
+
+```
+feature/<assunto> ──PR──► develop ──PR──► release ──PR──► main ──► auto-release ──► HACS
+```
+
+```bash
+node --check dist/mw-temp-humidity-card.js && node tools/probe.js
+```
+
+O probe instancia card e editor fora do navegador (32 verificações: grade,
+faixas de cor, rodapé, filtros do editor, defaults fora do YAML).
+
+Commits em inglês, assinados (GPG), autoria
+`MAYCON WILLIAN OLIVEIRA <visaodeempresa@gmail.com>`.
+
+## Licença
+
+MIT © MAYCON WILLIAN OLIVEIRA

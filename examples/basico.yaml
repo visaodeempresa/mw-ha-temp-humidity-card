@@ -1,0 +1,5 @@
+# O mínimo: bateria, nome e unidades vêm sozinhos.
+type: custom:mw-temp-humidity-card
+temp_entity: sensor.t_h_lux_da_sala_temperatura
+hum_entity: sensor.t_h_lux_da_sala_umidade
+name: SALA

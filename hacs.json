@@ -1,0 +1,6 @@
+{
+  "name": "MW Temperature / Humidity Card",
+  "filename": "mw-temp-humidity-card.js",
+  "render_readme": true,
+  "homeassistant": "2024.4.0"
+}

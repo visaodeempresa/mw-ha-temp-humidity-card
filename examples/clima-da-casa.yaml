@@ -1,0 +1,22 @@
+# Clima da casa em duas colunas. O card é largo: uma coluna no celular,
+# duas no desktop, funciona nos dois.
+type: grid
+columns: 2
+square: false
+cards:
+  - type: custom:mw-temp-humidity-card
+    temp_entity: sensor.t_h_lux_da_sala_temperatura
+    hum_entity: sensor.t_h_lux_da_sala_umidade
+    name: SALA
+  - type: custom:mw-temp-humidity-card
+    temp_entity: sensor.qualidade_do_ar_da_cozinha_temperatura
+    hum_entity: sensor.qualidade_do_ar_da_cozinha_umidade
+    name: COZINHA
+  - type: custom:mw-temp-humidity-card
+    temp_entity: sensor.organizar_qualidade_do_ar_do_escritorio_temperatura
+    hum_entity: sensor.organizar_qualidade_do_ar_do_escritorio_umidade
+    name: ESCRITÓRIO
+    show_protocol: true
+    protocol: zigbee
+    show_router: true
+    router: ZBT-2

@@ -1,0 +1,90 @@
+# Tudo o que dá para mexer, num card só — serve de referência de propriedades.
+type: custom:mw-temp-humidity-card
+temp_entity: sensor.qualidade_do_ar_da_cozinha_temperatura
+hum_entity: sensor.qualidade_do_ar_da_cozinha_umidade
+battery_entity: sensor.qualidade_do_ar_da_cozinha_bateria
+name: COZINHA
+
+# conteúdo
+show_name: true
+show_icons: true
+show_battery: true
+icon_temp: mdi:thermometer
+icon_hum: mdi:water-percent
+icon_unavailable: mdi:help-rhombus-outline
+temp_decimals: 1
+hum_decimals: 0
+
+# rodapé técnico (quatro flags independentes)
+show_protocol: true
+protocol: zigbee            # none | zigbee | zwave | wifi | bluetooth | thread | matter
+show_rssi: true
+rssi_entity: sensor.qualidade_do_ar_da_cozinha_rssi
+show_lqi: true
+lqi_entity: sensor.qualidade_do_ar_da_cozinha_lqi
+show_router: true
+router: ZBT-2               # none | HA | ZBT-2 | ZWA-2 | X5 | other
+router_label: ""            # sigla livre quando router = other
+
+# faixas de cor
+blend: true
+seam_blend: 10
+temp_stop_1: 16
+temp_stop_2: 20
+temp_stop_3: 24
+temp_stop_4: 28
+hum_stop_1: 30
+hum_stop_2: 40
+hum_stop_3: 60
+hum_stop_4: 70
+color_temp_1: "#3d7ebf"
+color_temp_2: "#4aa3c7"
+color_temp_3: "#4caf50"
+color_temp_4: "#f2a33c"
+color_temp_5: "#e4572e"
+color_hum_1: "#d99a3f"
+color_hum_2: "#d9c14f"
+color_hum_3: "#4caf50"
+color_hum_4: "#47a8c9"
+color_hum_5: "#2f7fb5"
+color_unavailable: rgba(120, 120, 120, 0.6)
+
+# texto
+text_auto_contrast: true
+color_text_dark: "#1a1a1a"
+color_text_light: "#ffffff"
+color_name: "#ffffff"
+color_foot: rgba(255, 255, 255, 0.85)
+
+# tamanhos e forma
+icon_size: 22
+value_size: 18
+name_size: 10
+battery_size: 12
+battery_icon_size: 18
+foot_size: 10
+border_radius: 10
+padding: 6
+gap: 4
+height: ""
+gradient: true
+shadow: true
+lift: true
+
+# bateria
+battery_show_percent: true
+battery_rotate: false
+battery_low: 20
+battery_medium: 50
+battery_high: 70
+color_battery_low: "#e53935"
+color_battery_medium: "#fdd835"
+color_battery_high: "#9ccc65"
+color_battery_full: "#43a047"
+color_battery_text: "#ffffff"
+
+# ações
+tap_action: auto            # auto = cada metade abre o seu sensor
+hold_action: none
+navigation_path: ""
+url_path: ""

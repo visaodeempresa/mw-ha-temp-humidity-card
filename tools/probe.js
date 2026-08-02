@@ -50,6 +50,7 @@ const hass = {
     "sensor.sala_lqi": S(108, { friendly_name: "Sala LQI" }),
     "sensor.quarto_temperatura": S(15, { device_class: "temperature", unit_of_measurement: "°C", friendly_name: "Quarto Temperatura" }),
     "sensor.quarto_umidade": S(82, { device_class: "humidity", unit_of_measurement: "%", friendly_name: "Quarto Umidade" }),
+    "sensor.umidade_absurda": S(140, { device_class: "humidity", unit_of_measurement: "%", friendly_name: "Umidade Absurda" }),
   },
   entities: {
     "sensor.sala_temperatura": { device_id: "dev1" },
@@ -94,11 +95,52 @@ check("nome sem a grandeza", html.includes(">Sala<"));
 check("ícones das pontas", html.includes("mdi:thermometer") && html.includes("mdi:water-percent"));
 check("sem rodapé por padrão", !html.includes('class="foot"'));
 
-// 23,4 °C cai entre a faixa 3 (conforto) e a 4 → com blend, cor interpolada
-const frio = mk({ ...base, temp_entity: "sensor.quarto_temperatura", blend: false });
+/* ---- escala canônica (padrão) ---- */
+// 23,4 °C → faixa (22.99, 23.99] = 127,255,0 · 58 % → faixa 58 = 115,144,238
+check("temperatura pela escala canônica", html.includes("rgba(127, 255, 0, 0.5)"), html.slice(0, 300));
+check("umidade pela escala canônica", html.includes("rgba(115, 144, 238, 0.5)"));
+// faixa seca por padrão: as duas metades são cores exatas da tabela, sem mistura
+const halves = (s) => (s.match(/linear-gradient\(90deg, ([^;]*?)\);/) || [])[1] || "";
+check("faixa seca por padrão na canônica",
+  halves(html).includes("rgba(127, 255, 0, 0.5)") && halves(html).includes("rgba(115, 144, 238, 0.5)"),
+  halves(html));
+check("sem vidro por padrão na canônica", !html.includes("linear-gradient(145deg"));
+check("texto segue o tema na canônica", html.includes("var(--primary-text-color)"));
+check("sem sombra de texto no modo tema", !/text-shadow:0 1px/.test(html));
+
+const canon = [
+  ["temp", "sensor.quarto_temperatura", 15, "rgba(0, 206, 209, 0.5)"],   // (13.99, 15.99]
+  ["hum", "sensor.quarto_umidade", 82, "rgba(0, 0, 125, 0.5)"],          // faixa 82
+];
+for (const [kind, ent, v, want] of canon) {
+  const out = kind === "temp" ? mk({ ...base, temp_entity: ent }) : mk({ ...base, hum_entity: ent });
+  check(`canônica ${kind} ${v} → ${want}`, out.includes(want), out.slice(0, 300));
+}
+
+const alpha = mk({ ...base, scale_alpha: 0.85 });
+check("scale_alpha muda a opacidade da escala", alpha.includes("rgba(127, 255, 0, 0.85)"));
+
+const canonBlend = mk({ ...base, blend: true });
+check("blend ligado na canônica interpola", !canonBlend.includes("rgba(127, 255, 0, 0.5)") &&
+  /linear-gradient\(90deg, rgba\(/.test(canonBlend), canonBlend.slice(0, 300));
+
+// umidade fora de 0..100 é ruído de sensor: preso na ponta, sem cor doida
+const forel = mk({ ...base, hum_entity: "sensor.umidade_absurda" });
+check("umidade acima de 100 prende em 100", forel.includes("rgba(0, 0, 0, 0.5)"), forel.slice(0, 300));
+
+/* ---- escala livre (opt-in, e automática em YAML antigo) ---- */
+const livre = { ...base, color_scale: "custom" };
+const frio = mk({ ...livre, temp_entity: "sensor.quarto_temperatura", blend: false });
 check("blend desligado usa a cor seca da faixa", frio.includes("#3d7ebf"), frio.slice(0, 200));
-const quente = mk({ ...base, temp_entity: "sensor.quarto_temperatura", hum_entity: "sensor.quarto_umidade", blend: false });
+const quente = mk({ ...livre, temp_entity: "sensor.quarto_temperatura", hum_entity: "sensor.quarto_umidade", blend: false });
 check("umidade 82% cai na faixa 5", quente.includes("#2f7fb5"));
+check("escala livre mantém o vidro", mk(livre).includes("linear-gradient(145deg"));
+
+// quem já tinha ajustado faixa na mão não acorda com outra escala
+const legado = mk({ ...base, color_temp_1: "#112233", blend: false, temp_entity: "sensor.quarto_temperatura" });
+check("YAML antigo com cor de faixa continua na escala livre", legado.includes("#112233"), legado.slice(0, 300));
+const legadoStop = mk({ ...base, temp_stop_1: 10 });
+check("YAML antigo com limite continua na escala livre", legadoStop.includes("linear-gradient(145deg"));
 
 const semBat = mk({ ...base, show_battery: false });
 check("grade sem bateria", /grid-template-areas:.*"i1 v1 v2 i2"/.test(semBat) && !semBat.includes("mdi:battery"));
@@ -118,8 +160,11 @@ check("roteador «outro» usa a sigla informada", outro.includes("SLZB-06"));
 const semLeitura = mk({ temp_entity: "sensor.nao_existe", hum_entity: "sensor.sala_umidade" });
 check("sem leitura não quebra", semLeitura.includes(">—<") && semLeitura.includes("mdi:help-rhombus-outline"));
 
-const contraste = mk({ ...base, temp_entity: "sensor.quarto_temperatura" });
+const contraste = mk({ ...livre, temp_entity: "sensor.quarto_temperatura" });
 check("texto claro sobre o azul frio", contraste.includes("#ffffff"));
+const forcado = mk({ ...base, text_mode: "contrast" });
+check("text_mode: contrast volta a decidir pela luminância",
+  !forcado.includes("var(--primary-text-color)") && /#1a1a1a|#ffffff/.test(forcado));
 
 let threw = false;
 try { new reg["mw-temp-humidity-card"]().setConfig({}); } catch (e) { threw = true; }
@@ -141,6 +186,34 @@ check("umidade filtrada pelo dispositivo",
 check("bateria lista os sensores do dispositivo", opts(schema, "battery_entity")[0] === "__none__" &&
   opts(schema, "battery_entity").includes("sensor.sala_bateria"));
 check("seções expansíveis", schema.filter((f) => f.type === "expandable").length === 6);
+
+const faixas = (cfg) => { const e = new reg["mw-temp-humidity-card-editor"](); e.hass = hass; e.setConfig(cfg);
+  return e._schema().find((f) => f.type === "expandable" && /Faixas/.test(f.title)).schema; };
+check("escala canônica mostra a opacidade e esconde os limites livres",
+  !!byName(faixas(base), "scale_alpha") && !byName(faixas(base), "temp_stop_1"));
+check("escala livre mostra os limites e esconde a opacidade",
+  !!byName(faixas({ ...base, color_scale: "custom" }), "temp_stop_1") &&
+  !byName(faixas({ ...base, color_scale: "custom" }), "scale_alpha"));
+check("seletor de escala com as duas opções",
+  JSON.stringify(byName(faixas(base), "color_scale").selector.select.options.map((o) => o.value)) ===
+  JSON.stringify(["mw", "custom"]));
+
+// blend/gradient têm default por escala: desligar na canônica precisa GRAVAR o
+// valor, senão o interruptor volta sozinho na próxima renderização
+const edScale = new reg["mw-temp-humidity-card-editor"]();
+edScale.hass = hass;
+edScale.setConfig(base);
+const scaleOut = [];
+edScale.dispatchEvent = (ev) => scaleOut.push(ev.detail.config);
+edScale._onChange({ stopPropagation() {}, detail: { value: { ...base, blend: true, gradient: true } } });
+check("ligar blend/vidro na canônica fica no YAML",
+  scaleOut[0].blend === true && scaleOut[0].gradient === true, JSON.stringify(scaleOut[0]));
+edScale.setConfig({ ...base, color_scale: "custom" });
+const scaleOut2 = [];
+edScale.dispatchEvent = (ev) => scaleOut2.push(ev.detail.config);
+edScale._onChange({ stopPropagation() {}, detail: { value: { ...base, color_scale: "custom", blend: true, gradient: true } } });
+check("na escala livre blend/vidro ligados são o default e saem do YAML",
+  scaleOut2[0].blend === undefined && scaleOut2[0].gradient === undefined, JSON.stringify(scaleOut2[0]));
 
 const foco = (cfg) => { const e = new reg["mw-temp-humidity-card-editor"](); e.hass = hass; e.setConfig(cfg);
   return e._schema().find((f) => f.type === "expandable" && /Rodapé/.test(f.title)).schema; };

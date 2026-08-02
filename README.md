@@ -16,7 +16,8 @@ Card do Lovelace para **temperatura e umidade**: dois sensores, **uma** bateria.
 ```
 
 A **metade esquerda** pinta pela faixa de temperatura, a **direita** pela faixa
-de umidade — cinco faixas cada, com degradê entre elas. Arquivo único, sem
+de umidade — na **escala canônica da casa**, a mesma dos `custom:button-card`
+dos dashboards (19 faixas de temperatura, 101 de umidade). Arquivo único, sem
 build: `dist/mw-temp-humidity-card.js` é fonte e artefato. JS puro +
 `<ha-form>`, sem dependências.
 
@@ -105,25 +106,56 @@ a umidade do novo. O editor **não grava defaults no YAML**.
 
 | Propriedade | Padrão | Descrição |
 |---|---|---|
-| `temp_stop_1..4` | `16`, `20`, `24`, `28` | Limites das 5 faixas de temperatura (°C). |
-| `hum_stop_1..4` | `30`, `40`, `60`, `70` | Limites das 5 faixas de umidade (%). |
-| `color_temp_1..5` | `#3d7ebf` `#4aa3c7` `#4caf50` `#f2a33c` `#e4572e` | Frio → conforto → quente. |
-| `color_hum_1..5` | `#d99a3f` `#d9c14f` `#4caf50` `#47a8c9` `#2f7fb5` | Seco → conforto → úmido. |
-| `blend` | `true` | Degradê entre as faixas. `false` = faixas secas. |
+| `color_scale` | `mw` | `mw` = escala canônica da casa · `custom` = as cinco faixas livres. |
+| `scale_alpha` | `0.5` | Opacidade das cores da escala canônica (0..1). |
+| `blend` | pela escala | Degradê entre as faixas. Padrão: **desligado** na `mw`, ligado na `custom`. |
 | `seam_blend` | `10` | % de transição no meio do card. `0` = corte seco no meio. |
 | `color_unavailable` | `rgba(120,120,120,0.6)` | Metade sem leitura. |
+| `temp_stop_1..4` | `16`, `20`, `24`, `28` | *(só na `custom`)* limites das 5 faixas de temperatura (°C). |
+| `hum_stop_1..4` | `30`, `40`, `60`, `70` | *(só na `custom`)* limites das 5 faixas de umidade (%). |
+| `color_temp_1..5` | `#3d7ebf` `#4aa3c7` `#4caf50` `#f2a33c` `#e4572e` | *(só na `custom`)* frio → conforto → quente. |
+| `color_hum_1..5` | `#d99a3f` `#d9c14f` `#4caf50` `#47a8c9` `#2f7fb5` | *(só na `custom`)* seco → conforto → úmido. |
 
-Com `blend: true` o valor caminha entre as cores âncora (o centro de cada
-faixa), então 23 °C fica num verde puxando para o âmbar em vez de saltar de
-cor no limite. Com `blend: false` cada faixa é uma cor seca — útil para
-leitura rápida "está na faixa X".
+#### Escala canônica (`color_scale: mw`, o padrão)
+
+É a tabela dos templates `temp_sensor_style` / `umid_sensor_style` usados nos
+`custom:button-card` da casa: **19 faixas** de temperatura (mais estreitas
+entre 19 e 27 °C, que é onde a casa vive) e **101 faixas** de umidade, uma por
+ponto percentual. As cores nascem com alfa `0.50` — são compostas com o fundo
+do card, e é por isso que o texto segue a cor do tema.
+
+Não é enfeite: 23 °C tem de ser a mesma cor neste card, no button-card ao lado
+e na planta baixa, senão o morador lê o número em vez de bater o olho.
+
+O padrão nesta escala é **faixa seca e fundo chapado** (`blend` e `gradient`
+desligados), para o card ficar idêntico ao button-card. Ligar o `blend`
+interpola entre as faixas: fica mais bonito e a fronteira dos 40 % e 60 % de
+umidade some.
+
+#### Escala livre (`color_scale: custom`)
+
+Cinco faixas por grandeza, limites e cores à sua escolha — para o caso em que
+a escala da casa não serve (adega, estufa, geladeira). YAML anterior à escala
+canônica que já mexia em `color_temp_*`, `color_hum_*`, `temp_stop_*` ou
+`hum_stop_*` **continua na escala livre sozinho**: quem ajustou cor na mão não
+acorda com outra escala.
 
 ### Texto, tamanhos e efeitos
 
-`text_auto_contrast` (`true`) escolhe entre `color_text_dark` (`#1a1a1a`) e
-`color_text_light` (`#ffffff`) pela luminância do fundo daquela metade — é o
-que mantém o número legível tanto no azul frio quanto no âmbar. Desligando,
-o texto usa sempre a cor clara.
+`text_mode` decide a cor do texto:
+
+| Valor | O que faz |
+|---|---|
+| `auto` *(padrão)* | Cor do tema na escala canônica; contraste por luminância na livre. |
+| `theme` | Sempre `var(--primary-text-color)`. |
+| `contrast` | Escolhe entre `color_text_dark` (`#1a1a1a`) e `color_text_light` (`#ffffff`) pela luminância do fundo daquela metade. |
+| `fixed` | Sempre a cor clara. |
+
+Contraste por luminância só funciona com cor **opaca**: a escala canônica é
+translúcida, e a luminância que vale só existe depois da composição com o
+fundo do card — que muda com o tema claro/escuro. Por isso o padrão ali é
+seguir o tema, como fazem os button-cards. `text_auto_contrast: false` (chave
+antiga) continua valendo como `text_mode: fixed`.
 
 Tamanhos (px): `icon_size` 22 · `value_size` 18 · `name_size` 10 ·
 `battery_size` 12 · `battery_icon_size` 18 · `foot_size` 10 ·
@@ -174,7 +206,7 @@ show_router: true
 router: ZBT-2
 ```
 
-### 3. Faixas secas e sem bateria (sensor alimentado por tomada)
+### 3. Corte seco no meio e sem bateria (sensor alimentado por tomada)
 
 ```yaml
 type: custom:mw-temp-humidity-card
@@ -182,7 +214,6 @@ temp_entity: sensor.organizar_qualidade_do_ar_do_escritorio_temperatura
 hum_entity: sensor.organizar_qualidade_do_ar_do_escritorio_umidade
 name: ESCRITÓRIO
 show_battery: false
-blend: false
 seam_blend: 0
 ```
 
@@ -193,6 +224,7 @@ type: custom:mw-temp-humidity-card
 temp_entity: sensor.adega_temperatura
 hum_entity: sensor.adega_umidade
 name: ADEGA
+color_scale: custom
 temp_stop_1: 10
 temp_stop_2: 12
 temp_stop_3: 14
@@ -211,8 +243,10 @@ Mais exemplos em [`examples/`](examples/).
 |---|---|---|
 | "Custom element doesn't exist" | recurso não carregado | ⌘⇧R (o `?hacstag=` é fixo por versão). |
 | Um lado mostra `—` | entidade não configurada ou sem número | Escolha o sensor no editor. |
-| Número ilegível numa das metades | contraste automático desligado | `text_auto_contrast: true`. |
-| Cores "saltando" | `blend: false` | Ligue o `blend`. |
+| Número ilegível numa das metades | modo de texto errado para a escala | `text_mode: auto` (tema na canônica, contraste na livre). |
+| Cores "saltando" a cada 0,1 °C | faixa seca (padrão da canônica) | `blend: true` — ao custo de borrar as fronteiras. |
+| Card mais claro que o button-card ao lado | vidro ligado por cima da escala | `gradient: false` (é o padrão na escala canônica). |
+| Cores diferentes do resto do dashboard | escala livre ligada por YAML antigo | `color_scale: mw`, e apague `color_temp_*` / `temp_stop_*`. |
 | Bateria em `--%` | sensor não encontrado | Escolha no editor, ou `show_battery: false`. |
 | HACS não mostra versão nova | commit ainda não chegou na `main` | O release só sai no merge para a `main`. |
 
@@ -226,8 +260,12 @@ feature/<assunto> ──PR──► develop ──PR──► release ──PR�
 node --check dist/mw-temp-humidity-card.js && node tools/probe.js
 ```
 
-O probe instancia card e editor fora do navegador (32 verificações: grade,
-faixas de cor, rodapé, filtros do editor, defaults fora do YAML).
+O probe instancia card e editor fora do navegador (47 verificações: grade,
+escala canônica e livre, rodapé, filtros do editor, defaults fora do YAML).
+
+O bloco da escala canônica é **embutido** a partir de
+`IA/lib/mw-climate-scale/`: editar lá e rodar `IA/tools/check-embeds.sh --fix`,
+nunca o contrário.
 
 Commits em inglês, assinados (GPG), autoria
 `MAYCON WILLIAN OLIVEIRA <visaodeempresa@gmail.com>`.

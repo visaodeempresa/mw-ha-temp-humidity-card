@@ -27,8 +27,11 @@ router: ZBT-2               # none | HA | ZBT-2 | ZWA-2 | X5 | other
 router_label: ""            # sigla livre quando router = other
 
 # faixas de cor
-blend: true
+color_scale: custom         # mw (padrão, escala canônica da casa) | custom
+scale_alpha: 0.5            # só na escala mw
+blend: true                 # padrão: desligado na mw, ligado na custom
 seam_blend: 10
+# daqui para baixo, só valem na escala custom
 temp_stop_1: 16
 temp_stop_2: 20
 temp_stop_3: 24
@@ -50,7 +53,7 @@ color_hum_5: "#2f7fb5"
 color_unavailable: rgba(120, 120, 120, 0.6)
 
 # texto
-text_auto_contrast: true
+text_mode: auto             # auto | theme | contrast | fixed
 color_text_dark: "#1a1a1a"
 color_text_light: "#ffffff"
 color_name: "#ffffff"

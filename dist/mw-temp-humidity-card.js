@@ -39,6 +39,10 @@
     temp_decimals: 1,
     hum_decimals: 0,
     // --- faixas de cor ---
+    color_scale: "mw",         // mw = escala canônica da casa · custom = as 5 faixas abaixo
+    scale_alpha: 0.5,          // opacidade das cores da escala canônica (0..1)
+    // blend e gradient dependem da escala: na «mw» o padrão é faixa seca e fundo
+    // chapado (idêntico ao button-card); na «custom», degradê e vidro. Ver SCALE_AWARE.
     blend: true,               // degradê entre as faixas (false = faixas secas)
     seam_blend: 10,            // % de transição no meio do card (0 = corte seco)
     temp_stop_1: 16, temp_stop_2: 20, temp_stop_3: 24, temp_stop_4: 28,
@@ -114,6 +118,68 @@
 
   const ROUTERS = ["HA", "ZBT-2", "ZWA-2", "X5"];
 
+  /* --------------------------- escala canônica --------------------------- */
+
+  // >>> mw-climate-scale v1 — fonte canônica: /Volumes/SSD-T1-01/CLAUDE-SSD/IA/lib/mw-climate-scale/mw-climate-scale.js
+  // Escala canônica de cor por temperatura (°C) e umidade relativa (%).
+  // Regra: IA/rules/global/40-cores-de-temperatura-e-umidade.md.
+  const MW_CLIMATE_SCALE_ALPHA = 0.5;
+
+  // 19 limites superiores inclusivos → 20 cores (a última vale de 46 °C para cima).
+  const MW_TEMP_STOPS = [
+    3.99, 6.99, 8.99, 13.99, 15.99, 17.99, 18.99, 20.99, 21.99, 22.99,
+    23.99, 24.99, 25.99, 26.99, 29.99, 32.99, 35.99, 39.99, 45.99,
+  ];
+  const MW_TEMP_RGB = (
+    "0,0,0 0,0,139 0,0,255 70,130,180 0,206,209 64,224,208 0,255,255 144,238,144 0,255,0 50,205,50 " +
+    "127,255,0 154,205,50 255,255,0 255,215,0 255,165,0 255,99,71 255,69,0 178,34,34 139,0,0 139,0,0"
+  ).split(" ");
+
+  // Uma faixa por ponto percentual: índice n cobre [n, n+1); 100 é faixa própria.
+  // O template original fecha a faixa em n.99 e deixa (n.99, n+1) sem dono — o
+  // laço cai no fallback, que é a cor de 100% (preto). Sensor que reporte
+  // 58,995 % pisca preto. Aqui o vão é fechado de propósito.
+  const MW_HUM_RGB = (
+    "0,0,0 51,0,0 102,0,0 153,0,0 204,0,0 255,0,0 255,11,0 255,22,0 255,33,0 255,45,0 " +
+    "255,56,0 255,67,0 255,78,0 255,89,0 255,100,0 255,111,0 255,122,0 255,133,0 255,144,0 255,155,0 " +
+    "255,165,0 255,170,0 255,174,0 255,179,0 255,183,0 255,188,0 255,192,0 255,197,0 255,201,0 255,206,0 " +
+    "255,210,0 255,215,0 255,219,0 255,224,0 255,228,0 255,233,0 255,237,0 255,242,0 255,246,0 255,251,0 " +
+    "255,255,0 170,255,85 85,255,170 0,255,255 12,252,253 24,249,251 36,246,249 48,243,247 60,240,245 72,237,243 " +
+    "84,234,241 96,231,239 108,228,237 120,225,235 132,222,234 144,219,231 156,216,229 173,216,230 115,144,238 58,72,246 " +
+    "0,0,255 0,0,249 0,0,243 0,0,237 0,0,231 0,0,225 0,0,219 0,0,213 0,0,207 0,0,201 " +
+    "0,0,195 0,0,189 0,0,183 0,0,177 0,0,171 0,0,165 0,0,159 0,0,153 0,0,147 0,0,141 " +
+    "0,0,139 0,0,132 0,0,125 0,0,118 0,0,111 0,0,104 0,0,97 0,0,90 0,0,83 0,0,76 " +
+    "0,0,69 0,0,62 0,0,55 0,0,48 0,0,41 0,0,34 0,0,27 0,0,20 0,0,13 0,0,6 " +
+    "0,0,0"
+  ).split(" ");
+  const MW_HUM_STOPS = MW_HUM_RGB.slice(1).map((_, i) => i + 0.99);
+
+  const mwClimateRgba = (triplet, alpha) => `rgba(${triplet.split(",").join(", ")}, ${alpha})`;
+
+  // Faixas + cores no formato do algoritmo de faixa comum: a cor é a primeira
+  // cujo limite superior não foi ultrapassado. `clamp` existe porque umidade
+  // fora de 0..100 é ruído de sensor, não frio.
+  const mwClimateScale = (kind, alpha) => {
+    const a = Number.isFinite(Number(alpha)) ? Number(alpha) : MW_CLIMATE_SCALE_ALPHA;
+    const hum = kind === "hum" || kind === "humidity" || kind === "umidade";
+    return {
+      stops: hum ? MW_HUM_STOPS : MW_TEMP_STOPS,
+      colors: (hum ? MW_HUM_RGB : MW_TEMP_RGB).map((t) => mwClimateRgba(t, a)),
+      clamp: hum ? [0, 100] : null,
+    };
+  };
+
+  // Cor seca (sem degradê), do jeito que o button-card faz.
+  const mwClimateColor = (kind, value, alpha) => {
+    const s = mwClimateScale(kind, alpha);
+    let v = Number(value);
+    if (!Number.isFinite(v)) return null;
+    if (s.clamp) v = Math.min(s.clamp[1], Math.max(s.clamp[0], v));
+    const i = s.stops.findIndex((stop) => v <= stop);
+    return s.colors[i === -1 ? s.stops.length : i];
+  };
+  // <<< mw-climate-scale v1
+
   /* ---------------------------- cor por faixa ---------------------------- */
 
   const parseColor = (str) => {
@@ -135,11 +201,15 @@
     a: +(c1.a + (c2.a - c1.a) * t).toFixed(3),
   });
 
-  // 4 limites → 5 faixas. Com blend, o valor caminha entre as cores âncora
-  // (o centro de cada faixa); sem blend, cada faixa é uma cor seca.
-  const bandColor = (value, stops, colors, blend) => {
-    const v = Number(value);
+  // Uma escala é { stops, colors, clamp }: N limites superiores → N+1 cores.
+  // Serve tanto para a canônica (19/100 limites) quanto para a livre (4).
+  // Com blend, o valor caminha entre as cores âncora (o centro de cada faixa);
+  // sem blend, cada faixa é uma cor seca — como no button-card.
+  const bandColor = (value, scale, blend) => {
+    let v = Number(value);
     if (!Number.isFinite(v)) return null;
+    const { stops, colors } = scale;
+    if (scale.clamp) v = Math.min(scale.clamp[1], Math.max(scale.clamp[0], v));
     let band = stops.findIndex((s) => v <= s);
     if (band === -1) band = stops.length;
     if (!blend) return colors[band];
@@ -162,6 +232,26 @@
     }
     return colors[colors.length - 1];
   };
+
+  // A escala canônica não muda: monta uma vez por opacidade e reusa. Sem isto,
+  // cada leitura reconstruiria os 101 rgba() da umidade.
+  const scaleCache = {};
+  const mwScaleFor = (kind, alpha) => {
+    const k = `${kind}:${alpha}`;
+    return scaleCache[k] || (scaleCache[k] = mwClimateScale(kind, alpha));
+  };
+
+  const isMwScale = (cfg) => (cfg.color_scale || DEFAULTS.color_scale) === "mw";
+
+  // Padrões que dependem da escala escolhida. A escala canônica imita o
+  // button-card: faixa seca e fundo chapado. A livre mantém degradê e vidro.
+  // O editor e o card leem daqui — dois lugares divergindo é bug garantido.
+  const SCALE_AWARE = {
+    blend: (mw) => !mw,
+    gradient: (mw) => !mw,
+  };
+  const resolvedDefault = (cfg, key) =>
+    (SCALE_AWARE[key] ? SCALE_AWARE[key](isMwScale(cfg)) : DEFAULTS[key]);
 
   // luminância relativa (sRGB) — decide texto escuro ou claro sobre a faixa
   const isLight = (color) => {
@@ -267,7 +357,12 @@
       if (!config || (!config.temp_entity && !config.hum_entity)) {
         throw new Error("mw-temp-humidity-card: defina ao menos 'temp_entity' ou 'hum_entity'");
       }
-      this._config = { ...DEFAULTS, ...config };
+      // YAML de antes da escala canônica que já mexia nas faixas livres continua
+      // com elas: quem ajustou cor na mão não quer acordar com outra escala.
+      const legacy = !("color_scale" in config)
+        && Object.keys(config).some((k) => /^(color_(temp|hum)_[1-5]|(temp|hum)_stop_[1-4])$/.test(k));
+      this._user = { ...config, ...(legacy ? { color_scale: "custom" } : {}) };
+      this._config = { ...DEFAULTS, ...this._user };
       this._key = null;
       if (this._hass) this._render();
     }
@@ -368,20 +463,43 @@
 
     _render() {
       const c = this._config;
-      const stops = (p) => [c[`${p}_stop_1`], c[`${p}_stop_2`], c[`${p}_stop_3`], c[`${p}_stop_4`]].map(Number);
-      const colors = (p) => [1, 2, 3, 4, 5].map((i) => c[`color_${p}_${i}`]);
+      const u = this._user || {};
+      const mw = isMwScale(c);
+      const freeScale = (p) => ({
+        stops: [c[`${p}_stop_1`], c[`${p}_stop_2`], c[`${p}_stop_3`], c[`${p}_stop_4`]].map(Number),
+        colors: [1, 2, 3, 4, 5].map((i) => c[`color_${p}_${i}`]),
+        clamp: null,
+      });
+      const scaleOf = (p) => (mw ? mwScaleFor(p === "temp" ? "temp" : "hum", c.scale_alpha) : freeScale(p));
+      const opt = (k) => (k in u ? u[k] !== false : resolvedDefault(c, k));
 
       const t = this._value(c.temp_entity, Number(c.temp_decimals) || 0);
       const h = this._value(c.hum_entity, Number(c.hum_decimals) || 0);
-      const tempColor = bandColor(t.num, stops("temp"), colors("temp"), c.blend !== false) || c.color_unavailable;
-      const humColor = bandColor(h.num, stops("hum"), colors("hum"), c.blend !== false) || c.color_unavailable;
+      const blend = opt("blend");
+      const tempColor = bandColor(t.num, scaleOf("temp"), blend) || c.color_unavailable;
+      const humColor = bandColor(h.num, scaleOf("hum"), blend) || c.color_unavailable;
 
-      const auto = c.text_auto_contrast !== false;
-      const tText = auto ? (isLight(tempColor) ? c.color_text_dark : c.color_text_light) : c.color_text_light;
-      const hText = auto ? (isLight(humColor) ? c.color_text_dark : c.color_text_light) : c.color_text_light;
+      // Escala canônica é translúcida: quem decide a legibilidade é o tema, não
+      // a luminância de uma cor que ainda vai ser composta com o fundo do card.
+      const mode = c.text_mode && c.text_mode !== "auto" ? c.text_mode
+        : mw ? "theme"
+        : c.text_auto_contrast === false ? "fixed" : "contrast";
+      const theme = mode === "theme";
+      const THEME_TEXT = "var(--primary-text-color)";
+      const byLuma = (bg) => (isLight(bg) ? c.color_text_dark : c.color_text_light);
+      const tText = theme ? THEME_TEXT : mode === "contrast" ? byLuma(tempColor) : c.color_text_light;
+      const hText = theme ? THEME_TEXT : mode === "contrast" ? byLuma(humColor) : c.color_text_light;
       // a bateria fica no meio: segue o lado mais escuro para não sumir
-      const bText = auto ? (isLight(tempColor) && isLight(humColor) ? c.color_text_dark : c.color_text_light)
+      const bText = theme ? THEME_TEXT
+        : mode === "contrast" ? (isLight(tempColor) && isLight(humColor) ? c.color_text_dark : c.color_text_light)
         : c.color_battery_text;
+      // sombra de texto e brilho nos ícones existem para texto claro sobre cor
+      // forte; no modo tema (fundo translúcido) só sujam a leitura
+      const tsh = (o) => (theme ? "none" : `0 1px 1px rgba(0,0,0,${o})`);
+      const idrop = (o) => (theme ? "none" : `drop-shadow(0 1px 1px rgba(0,0,0,${o}))`);
+      const nameColor = "color_name" in u ? c.color_name : theme ? THEME_TEXT : c.color_name;
+      const footColor = "color_foot" in u ? c.color_foot
+        : theme ? "var(--secondary-text-color)" : c.color_foot;
 
       const showIcons = c.show_icons !== false;
       const showBat = c.show_battery !== false;
@@ -403,7 +521,9 @@
       const halves = seam === 0
         ? `linear-gradient(90deg, ${tempColor} 0 50%, ${humColor} 50% 100%)`
         : `linear-gradient(90deg, ${tempColor} 0 ${50 - seam / 2}%, ${humColor} ${50 + seam / 2}% 100%)`;
-      const glass = c.gradient === false ? ""
+      // o vidro clareia a cor; com a escala canônica o fundo nasce chapado para
+      // o card bater com os button-cards que usam a mesma escala
+      const glass = !opt("gradient") ? ""
         : `linear-gradient(145deg, rgba(255,255,255,0.20) 0%, rgba(255,255,255,0.06) 42%, rgba(0,0,0,0.08) 100%), `;
       const shadow = c.shadow === false ? "none"
         : `inset 1px 1px 0 rgba(255,255,255,0.28), inset -1px -1px 0 rgba(0,0,0,0.10),
@@ -422,7 +542,7 @@
           ha-card{box-sizing:border-box;padding:${px(c.padding) || "6px"};
             border-radius:${px(c.border_radius) || "10px"};
             background-image:${glass}${halves};
-            border:1px solid rgba(255,255,255,0.16) !important;
+            border:1px solid ${theme ? "var(--divider-color)" : "rgba(255,255,255,0.16)"} !important;
             transform:${lift};box-shadow:${shadow};${height ? `height:${height};` : ""}
             transition:transform 180ms ease, box-shadow 180ms ease, background-image 250ms ease;
             overflow:hidden;-webkit-tap-highlight-color:transparent;
@@ -430,27 +550,27 @@
           .ct{display:grid;width:100%;height:100%;align-items:center;
             grid-template-areas:${rows.join(" ")};grid-template-columns:${colSizes};}
           .nm{grid-area:n;justify-self:center;font-size:${px(c.name_size) || "10px"};
-            color:${esc(c.color_name)};text-shadow:0 1px 1px rgba(0,0,0,0.30);
+            color:${esc(nameColor)};text-shadow:${tsh(0.30)};
             line-height:1.2;padding-bottom:2px;}
           .i1{grid-area:i1;justify-self:start;}
           .i2{grid-area:i2;justify-self:end;}
           .i1 ha-icon,.i2 ha-icon{width:${isz};height:${isz};--mdc-icon-size:${isz};
-            filter:drop-shadow(0 1px 1px rgba(0,0,0,0.28));display:flex;}
+            filter:${idrop(0.28)};display:flex;}
           .i1 ha-icon{color:${esc(tText)};}
           .i2 ha-icon{color:${esc(hText)};}
           .v1,.v2{font-size:${px(c.value_size) || "18px"};font-weight:700;line-height:1.1;
             font-variant-numeric:tabular-nums;font-feature-settings:"tnum" 1;
-            text-shadow:0 1px 1px rgba(0,0,0,0.22);cursor:pointer;}
+            text-shadow:${tsh(0.22)};cursor:pointer;}
           .v1{grid-area:v1;justify-self:start;color:${esc(tText)};padding-left:${px(c.gap) || "4px"};}
           .v2{grid-area:v2;justify-self:end;color:${esc(hText)};padding-right:${px(c.gap) || "4px"};}
           .u{font-size:0.62em;font-weight:600;opacity:.8;padding-left:2px;}
           .bat{grid-area:b;justify-self:center;font-size:${px(c.battery_size) || "12px"};
-            color:${esc(bText)};text-shadow:0 1px 1px rgba(0,0,0,0.25);cursor:pointer;}
+            color:${esc(bText)};text-shadow:${tsh(0.25)};cursor:pointer;}
           .bt{display:inline-flex;align-items:center;gap:1px;}
           .bp{display:inline-block;${c.battery_rotate === true ? "width:26px;transform:rotate(90deg);" : ""}}
           .foot{grid-area:f;justify-self:center;display:inline-flex;align-items:center;gap:5px;
-            font-size:${px(c.foot_size) || "10px"};color:${esc(c.color_foot)};padding-top:2px;
-            text-shadow:0 1px 1px rgba(0,0,0,0.30);}
+            font-size:${px(c.foot_size) || "10px"};color:${esc(footColor)};padding-top:2px;
+            text-shadow:${tsh(0.30)};}
           .foot ha-icon{width:1.25em;height:1.25em;--mdc-icon-size:1.25em;display:flex;}
           .foot .rt{display:inline-flex;align-items:center;gap:2px;font-weight:600;}
           .sep{font-style:normal;opacity:.5;}
@@ -554,6 +674,8 @@
     icon_unavailable: "Ícone (sem leitura)",
     temp_decimals: "Casas decimais da temperatura",
     hum_decimals: "Casas decimais da umidade",
+    color_scale: "Escala de cores",
+    scale_alpha: "Opacidade da escala canônica",
     blend: "Degradê entre as faixas (desligado = faixas secas)",
     seam_blend: "Transição no meio do card",
     temp_stop_1: "Temperatura: fim da faixa 1 (frio)",
@@ -577,6 +699,7 @@
     gradient: "Brilho de vidro no fundo",
     shadow: "Sombra em relevo",
     lift: "Card levemente levantado",
+    text_mode: "Cor do texto",
     text_auto_contrast: "Escolher a cor do texto pelo fundo (contraste automático)",
     battery_show_percent: "Mostrar o percentual da bateria",
     battery_rotate: "Girar o percentual 90°",
@@ -616,6 +739,18 @@
     "color_unavailable", "color_text_dark", "color_text_light", "color_name",
     "color_foot", "color_battery_text", "color_battery_low", "color_battery_medium",
     "color_battery_high", "color_battery_full",
+  ];
+
+  const SCALES = [
+    { value: "mw", label: "Canônica da casa (a mesma dos button-cards)" },
+    { value: "custom", label: "Livre (cinco faixas por grandeza)" },
+  ];
+
+  const TEXT_MODES = [
+    { value: "auto", label: "Automático (tema na canônica, contraste na livre)" },
+    { value: "theme", label: "Cor do tema" },
+    { value: "contrast", label: "Contraste com o fundo" },
+    { value: "fixed", label: "Sempre a cor clara" },
   ];
 
   const ACTIONS = [
@@ -689,16 +824,23 @@
         },
         {
           name: "", type: "expandable", title: "Faixas de cor", schema: [
+            { name: "color_scale", selector: sel(SCALES) },
+            // os limites livres só fazem sentido na escala livre; a canônica
+            // tem os dela (19 faixas de temperatura, 101 de umidade)
+            ...(isMwScale(cfg) ? [
+              { name: "scale_alpha", selector: { number: { min: 0, max: 1, step: 0.05, mode: "slider" } } },
+            ] : [
+              { name: "temp_stop_1", selector: num(-50, 80, "°") },
+              { name: "temp_stop_2", selector: num(-50, 80, "°") },
+              { name: "temp_stop_3", selector: num(-50, 80, "°") },
+              { name: "temp_stop_4", selector: num(-50, 80, "°") },
+              { name: "hum_stop_1", selector: num(0, 100, "%") },
+              { name: "hum_stop_2", selector: num(0, 100, "%") },
+              { name: "hum_stop_3", selector: num(0, 100, "%") },
+              { name: "hum_stop_4", selector: num(0, 100, "%") },
+            ]),
             { name: "blend", selector: { boolean: {} } },
             { name: "seam_blend", selector: num(0, 40, "%") },
-            { name: "temp_stop_1", selector: num(-50, 80, "°") },
-            { name: "temp_stop_2", selector: num(-50, 80, "°") },
-            { name: "temp_stop_3", selector: num(-50, 80, "°") },
-            { name: "temp_stop_4", selector: num(-50, 80, "°") },
-            { name: "hum_stop_1", selector: num(0, 100, "%") },
-            { name: "hum_stop_2", selector: num(0, 100, "%") },
-            { name: "hum_stop_3", selector: num(0, 100, "%") },
-            { name: "hum_stop_4", selector: num(0, 100, "%") },
           ],
         },
         {
@@ -710,7 +852,7 @@
             { name: "icon_unavailable", selector: { icon: {} } },
             { name: "temp_decimals", selector: num(0, 3, "") },
             { name: "hum_decimals", selector: num(0, 3, "") },
-            { name: "text_auto_contrast", selector: { boolean: {} } },
+            { name: "text_mode", selector: sel(TEXT_MODES) },
           ],
         },
         {
@@ -760,6 +902,11 @@
       this._form.hass = this._hass;
       this._form.schema = this._schema();
       const data = { ...DEFAULTS, ...this._config };
+      // sem isto o interruptor mostraria o default da tabela e não o que o card
+      // vai fazer de fato com a escala escolhida — e voltaria sozinho ao ser mexido
+      for (const k of Object.keys(SCALE_AWARE)) {
+        if (!(k in this._config)) data[k] = resolvedDefault(this._config, k);
+      }
       for (const k of Object.keys(data)) if (data[k] === "") delete data[k];
       this._form.data = data;
       this._renderColors();
@@ -772,7 +919,12 @@
           "margin-top:16px;border:1px solid var(--divider-color);border-radius:8px;padding:8px 12px;";
         this.appendChild(this._colorsEl);
       }
-      const rows = COLOR_FIELDS.map((name) => {
+      // as cores das faixas livres não pintam nada na escala canônica — mostrar
+      // seletor que não muda a tela é pior do que não mostrar
+      const fields = isMwScale(this._config)
+        ? COLOR_FIELDS.filter((n) => !/^color_(temp|hum)_[1-5]$/.test(n))
+        : COLOR_FIELDS;
+      const rows = fields.map((name) => {
         const cur = this._config[name] ?? DEFAULTS[name] ?? "";
         const c = parseColor(cur || "rgba(128,128,128,1)");
         return `<div class="thc-crow" data-name="${name}">
@@ -819,7 +971,10 @@
         if (val === undefined || val === null || val === "") continue;
         if (k === "battery_entity" && val === NONE) { noBattery = true; continue; }
         if ((k === "rssi_entity" || k === "lqi_entity") && val === NONE) continue;
-        if (k === "temp_entity" || k === "hum_entity" || k === "device" || val !== DEFAULTS[k]) clean[k] = val;
+        // blend/gradient comparam com o default DA ESCALA; contra DEFAULTS o
+        // interruptor voltaria sozinho ao ser desligado na escala canônica
+        if (k === "temp_entity" || k === "hum_entity" || k === "device"
+          || val !== resolvedDefault(v, k)) clean[k] = val;
       }
       if (noBattery) { delete clean.battery_entity; clean.battery_auto = false; }
       // trocar de dispositivo invalida o que era do dispositivo antigo
@@ -862,7 +1017,7 @@
     documentationURL: "https://github.com/visaodeempresa/mw-ha-temp-humidity-card",
   });
 
-  console.info("%c MW-TEMP-HUMIDITY-CARD %c 0.1.0 ",
+  console.info("%c MW-TEMP-HUMIDITY-CARD %c 0.2.0 ",
     "background:#1a1a1a;color:#fdfaf3;font-weight:700;",
     "background:#4aa3c7;color:#1a1a1a;font-weight:700;");
 })();

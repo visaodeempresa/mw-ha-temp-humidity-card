@@ -1017,7 +1017,7 @@
     documentationURL: "https://github.com/visaodeempresa/mw-ha-temp-humidity-card",
   });
 
-  console.info("%c MW-TEMP-HUMIDITY-CARD %c 0.2.0 ",
+  console.info("%c MW-TEMP-HUMIDITY-CARD %c 0.1.0 ",
     "background:#1a1a1a;color:#fdfaf3;font-weight:700;",
     "background:#4aa3c7;color:#1a1a1a;font-weight:700;");
 })();
